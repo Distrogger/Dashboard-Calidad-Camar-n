@@ -4,13 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard Gerencial - Calidad y Rendimiento</title>
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- PapaParse para leer CSV -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-    <!-- FontAwesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <style>
@@ -48,7 +44,7 @@
 
     <nav class="bg-white px-6 border-b border-slate-200 overflow-x-auto">
         <ul class="flex gap-6 text-sm text-slate-500 min-w-max">
-            <li><button class="tab-btn active py-4 hover:text-slate-800 transition" onclick="openTab(event, 'tab1')">1. Rendimiento Industrial y Rechazo (OMIPROD)</button></li>
+            <li><button class="tab-btn active py-4 hover:text-slate-800 transition" onclick="openTab(event, 'tab1')">1. Rendimiento Industrial y Rechazo</button></li>
             <li><button class="tab-btn py-4 hover:text-slate-800 transition" onclick="openTab(event, 'tab2')">2. Matriz Organoléptica</button></li>
             <li><button class="tab-btn py-4 hover:text-slate-800 transition" onclick="openTab(event, 'tab3')">3. Ranking de Proveedores</button></li>
             <li><button class="tab-btn py-4 hover:text-slate-800 transition" onclick="openTab(event, 'tab4')">4. Sábana Consolidada</button></li>
@@ -59,6 +55,25 @@
         
         <!-- PESTAÑA 1 -->
         <section id="tab1" class="tab-content active">
+            <div class="flex flex-col md:flex-row gap-4 mb-6">
+                 <div class="w-full md:w-1/4">
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Filtrar por Camaronera</label>
+                    <select id="filterCamaronera" onchange="renderDashboard()" class="border border-slate-300 rounded px-3 py-2 text-sm w-full">
+                        <option value="ALL">Todas</option>
+                    </select>
+                </div>
+                <div class="w-full md:w-1/4">
+                     <label class="block text-sm font-medium text-slate-700 mb-1">Filtrar por Categoría (Clase)</label>
+                    <select id="filterClase" onchange="renderDashboard()" class="border border-slate-300 rounded px-3 py-2 text-sm w-full">
+                        <option value="ALL">Todas</option>
+                        <option value="A">Clase A</option>
+                        <option value="B">Clase B</option>
+                        <option value="C">Clase C</option>
+                        <option value="D">Clase D</option>
+                    </select>
+                </div>
+            </div>
+
             <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                 <div class="bg-white p-4 rounded-lg shadow-sm border border-slate-200">
                     <p class="text-xs text-slate-500 font-bold uppercase">Rendimiento Industrial</p>
@@ -87,14 +102,18 @@
                     <h4 class="text-sm font-bold text-slate-700 mb-4">Flujo de Pérdida de Valor (Base Porcentual 100%)</h4>
                     <div class="relative h-64"><canvas id="chartWaterfall"></canvas></div>
                 </div>
-                <div class="bg-white p-4 rounded-lg shadow-sm border border-slate-200">
-                    <h4 class="text-sm font-bold text-slate-700 mb-4">Destino Final por Proveedor (% Procesado)</h4>
-                    <div class="relative h-64"><canvas id="chartStacked"></canvas></div>
+                <div class="bg-white p-4 rounded-lg shadow-sm border border-slate-200 flex flex-col items-center justify-center">
+                     <h4 class="text-sm font-bold text-slate-700 mb-4 w-full text-left">Distribución de Clases (Entero)</h4>
+                    <div class="relative h-64 w-full max-w-sm"><canvas id="chartPie"></canvas></div>
                 </div>
             </div>
-            <div class="bg-white p-4 rounded-lg shadow-sm border border-slate-200">
-                <h4 class="text-sm font-bold text-slate-700 mb-4">Correlación: % Fresco y Sano en Recepción vs. % Rechazo a Cola Real</h4>
-                <div class="relative h-56"><canvas id="chartScatter"></canvas></div>
+             <div class="bg-white p-4 rounded-lg shadow-sm border border-slate-200">
+                <h4 class="text-sm font-bold text-slate-700 mb-4">Disposición de Libras Recibidas por Camaronera (Composición 100%)</h4>
+                <div class="relative h-[400px] w-full overflow-x-auto">
+                    <div class="min-w-[800px] h-full">
+                        <canvas id="chartStackedBarCamaroneras"></canvas>
+                    </div>
+                </div>
             </div>
         </section>
 
@@ -133,7 +152,7 @@
                 </div>
                 <div class="overflow-x-auto h-[400px]">
                     <table class="w-full gerencial-table relative">
-                        <thead class="sticky top-0 shadow-sm">
+                        <thead class="sticky top-0 shadow-sm z-10">
                             <tr>
                                 <th>Camaronera Oficial</th>
                                 <th>Piscina</th>
@@ -222,16 +241,15 @@
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
             document.getElementById(tabName).classList.add('active');
             evt.currentTarget.classList.add('active');
+            if(tabName === 'tab1') renderDashboard(); // re-render charts to fix sizing issues on tab switch
         }
 
         let db = { liquidaciones: [], sabores: [], metabisulfito: [], consolidado: [] };
-        let charts = {}; // Para destruir gráficos previos y evitar superposiciones
+        let charts = {};
 
-        // Limpiador estricto de números (elimina comas de los miles)
         function parseNum(val) {
             if (typeof val === 'number') return val;
             if (!val || val.toString().trim() === '') return 0;
-            // Elimina comas y convierte a float
             let cleanVal = val.toString().replace(/,/g, '').trim();
             return parseFloat(cleanVal) || 0;
         }
@@ -255,7 +273,7 @@
             let loaded = 0;
             Array.from(files).forEach(file => {
                 Papa.parse(file, {
-                    header: true, dynamicTyping: false, skipEmptyLines: true, // dynamicTyping = false para evitar errores con comas
+                    header: true, dynamicTyping: false, skipEmptyLines: true,
                     complete: function(results) {
                         let name = file.name.toLowerCase();
                         if(name.includes('omiprod')) db.liquidaciones = results.data;
@@ -300,6 +318,7 @@
             document.getElementById('status-indicator').className = "text-xs font-semibold px-3 py-1 bg-blue-100 text-blue-800 rounded-full";
             
             let lotesMap = new Map();
+            let camaronerasSet = new Set();
 
             // 1. OMIPROD0016
             db.liquidaciones.forEach(row => {
@@ -309,7 +328,7 @@
                 if(!lotesMap.has(lote)) {
                     lotesMap.set(lote, {
                         Lote: lote,
-                        Camaronera_Oficial: "Desconocida", // Valor por defecto
+                        Camaronera_Oficial: "Desconocida",
                         Piscina: "",
                         Libras_Recibidas: parseNum(row['Libras Recibidas']),
                         Libras_Procesadas: parseNum(row['Libras Procesadas']),
@@ -359,6 +378,7 @@
                     l.Proveedor = (row['Proveedor'] || "Desconocido").trim();
                     l.Piscina = (row['Piscina'] || "").trim();
                     l.Camaronera_Oficial = getCamaroneraOficial(l.Piscina, row['Camaronera']);
+                    camaronerasSet.add(l.Camaronera_Oficial);
                     
                     l.Sabor_Caract = parseNum(row['Sabor caracteristico %']);
                     l.Tierra_L = parseNum(row['Sabor tierra entero leve %']);
@@ -368,7 +388,6 @@
                 }
             });
 
-            // Post-proceso de lotes
             Array.from(lotesMap.values()).forEach(l => {
                 let lote = l.Lote;
                 if(metaTemp[lote] && metaTemp[lote].totalLbs > 0) {
@@ -381,7 +400,6 @@
                     l.Perc_Fresco = 0; l.Perc_Meta = 0; l.Mancha_Leve = 0; l.Mancha_Fuerte = 0; l.Bact_Leve = 0;
                 }
                 
-                // Definir Clase Válida basada en volumen
                 let maxLbs = 0;
                 let cValida = "-";
                 if(l.Clases.A > maxLbs) { cValida = 'A'; maxLbs = l.Clases.A; }
@@ -393,6 +411,15 @@
             });
 
             db.consolidado = Array.from(lotesMap.values());
+            
+            // Populate Filters
+            let camSelect = document.getElementById('filterCamaronera');
+            Array.from(camaronerasSet).sort().forEach(c => {
+                 let opt = document.createElement('option');
+                 opt.value = c; opt.innerHTML = c;
+                 camSelect.appendChild(opt);
+            });
+
             renderDashboard();
             document.getElementById('status-indicator').textContent = "Dashboard Actualizado";
             document.getElementById('status-indicator').className = "text-xs font-semibold px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full";
@@ -403,8 +430,19 @@
             charts[id] = new Chart(document.getElementById(id), config);
         }
 
+        function getFilteredData() {
+            let filterCam = document.getElementById('filterCamaronera').value;
+            let filterClase = document.getElementById('filterClase').value;
+            
+            return db.consolidado.filter(d => {
+                let matchCam = filterCam === 'ALL' || d.Camaronera_Oficial === filterCam;
+                let matchClase = filterClase === 'ALL' || d.Clase_Valida === filterClase;
+                return matchCam && matchClase;
+            });
+        }
+
         function renderDashboard() {
-            const data = db.consolidado;
+            const data = getFilteredData();
             
             // TÓTALES PARA KPIs
             let totalRecibidas = data.reduce((a,b)=>a+b.Libras_Recibidas, 0);
@@ -413,6 +451,8 @@
             let totalBasura = data.reduce((a,b)=>a+b.Basura, 0);
             let totalClaseA = data.reduce((a,b)=>a+b.Clases.A, 0);
             let totalValor = data.reduce((a,b)=>a+b.Valor_Total, 0);
+            let totalClaseB = data.reduce((a,b)=>a+b.Clases.B, 0);
+            let totalClaseC = data.reduce((a,b)=>a+b.Clases.C, 0);
             
             let rndIndustrial = totalRecibidas > 0 ? (totalProcesadas/totalRecibidas)*100 : 0;
             let dowRechazo = totalProcesadas > 0 ? (totalRechazo/totalProcesadas)*100 : 0;
@@ -427,22 +467,25 @@
             document.getElementById('kpi-valor').innerText = "Valor Liq: $" + totalValor.toLocaleString('en-US', {maximumFractionDigits:0});
 
             // ---------------------------------------------------------
-            // GRÁFICA 1: CASCADA PORCENTUAL (Corrección de deformación)
+            // GRÁFICA 1: CASCADA PORCENTUAL CON VALORES NUMÉRICOS
             // ---------------------------------------------------------
             let baseCascada = totalRecibidas > 0 ? totalRecibidas : 1;
             let pctBasura = (totalBasura / baseCascada) * 100;
             let pctProcesadas = (totalProcesadas / baseCascada) * 100;
             let pctRechazo = (totalRechazo / baseCascada) * 100;
-            let pctEntero = pctProcesadas - pctRechazo; // Lo que queda para A,B,C
+            let pctEntero = pctProcesadas - pctRechazo;
+
+            // Arrays for tooltips
+            let valArray = [totalRecibidas, -totalBasura, totalProcesadas, -totalRechazo, totalProcesadas - totalRechazo];
 
             createChart('chartWaterfall', {
                 type: 'bar',
                 data: {
-                    labels: ['1. Recibidas (Base)', '2. Merma/Basura', '3. Procesadas', '4. Desvío Cola', '5. Entero Final'],
+                    labels: ['1. Recibidas', '2. Merma/Basura', '3. Procesadas', '4. Desvío Cola', '5. Entero Final'],
                     datasets: [{
                         label: '% del Lote Original',
                         data: [100, -pctBasura, pctProcesadas, -pctRechazo, pctEntero],
-                        backgroundColor: ['#94a3b8', '#ef4444', '#3b82f6', '#f59e0b', '#10b981'],
+                        backgroundColor: ['#94a3b8', '#fecdd3', '#3b82f6', '#f59e0b', '#10b981'],
                         borderRadius: 4
                     }]
                 },
@@ -450,27 +493,111 @@
                     responsive: true, maintainAspectRatio: false,
                     plugins: { 
                         legend: { display: false },
-                        tooltip: { callbacks: { label: (ctx) => Math.abs(ctx.raw).toFixed(2) + '%' } }
+                        tooltip: { 
+                            callbacks: { 
+                                label: (ctx) => {
+                                    let pct = Math.abs(ctx.raw).toFixed(2) + '%';
+                                    let val = Math.abs(valArray[ctx.dataIndex]).toLocaleString('en-US', {maximumFractionDigits:0}) + ' lbs';
+                                    return `${pct} (${val})`;
+                                }
+                            } 
+                        }
                     },
                     scales: { y: { suggestedMin: -10, suggestedMax: 100 } }
                 }
             });
 
-            // Scatter Chart
-            let scatterData = data.filter(d=> d.Libras_Recibidas>0 && d.Libras_Procesadas>0).map(d => ({
-                x: d.Perc_Fresco,
-                y: (d.Rechazo / d.Libras_Procesadas) * 100,
-                r: Math.max(3, Math.sqrt(d.Libras_Recibidas) / 50) // Escala controlada
-            }));
-            createChart('chartScatter', {
-                type: 'bubble',
-                data: { datasets: [{ label: 'Lotes', data: scatterData, backgroundColor: 'rgba(15, 23, 42, 0.5)' }] },
-                options: { responsive: true, maintainAspectRatio: false }
+            // ---------------------------------------------------------
+            // GRÁFICA PIE: DISTRIBUCIÓN DE CLASES
+            // ---------------------------------------------------------
+             createChart('chartPie', {
+                type: 'pie',
+                data: {
+                    labels: ['Clase A', 'Clase B', 'Clase C'],
+                    datasets: [{
+                        data: [totalClaseA, totalClaseB, totalClaseC],
+                        backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom' },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.label || '';
+                                    let value = context.raw;
+                                    let total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    let percentage = total > 0 ? ((value / total) * 100).toFixed(1) + '%' : '0%';
+                                    return `${label}: ${percentage} (${value.toLocaleString()} lbs)`;
+                                }
+                            }
+                        }
+                    }
+                }
             });
 
-            // Stacked Bar (Destino por Proveedor)
-            // Lógica similar a la tabla de ranking para agrupar por prov
-            // (Omitido en código extenso para mantener espacio, puedes agregarlo iterando `provs` abajo)
+            // ---------------------------------------------------------
+            // GRÁFICA STACKED BAR: Disposición por Camaronera
+            // ---------------------------------------------------------
+            let provDisp = {};
+            data.forEach(d => {
+                let p = d.Camaronera_Oficial;
+                if(!provDisp[p]) provDisp[p] = { lbsRecibidas:0, a:0, b:0, c:0, d:0, rechazo:0, basura:0 };
+                provDisp[p].lbsRecibidas += d.Libras_Recibidas;
+                provDisp[p].a += d.Clases.A;
+                provDisp[p].b += d.Clases.B;
+                provDisp[p].c += d.Clases.C;
+                provDisp[p].d += d.Clases.D;
+                provDisp[p].rechazo += d.Rechazo;
+                provDisp[p].basura += d.Basura;
+            });
+
+            let camLabels = [];
+            let dataA = [], dataB = [], dataC = [], dataRech = [], dataBas = [], rawValues = {a:[], b:[], c:[], rech:[], bas:[]};
+
+            Object.keys(provDisp).sort().forEach(k => {
+                let o = provDisp[k];
+                if(o.lbsRecibidas > 0) {
+                    camLabels.push(k);
+                    dataA.push((o.a / o.lbsRecibidas) * 100); rawValues.a.push(o.a);
+                    dataB.push((o.b / o.lbsRecibidas) * 100); rawValues.b.push(o.b);
+                    dataC.push((o.c / o.lbsRecibidas) * 100); rawValues.c.push(o.c);
+                    dataRech.push((o.rechazo / o.lbsRecibidas) * 100); rawValues.rech.push(o.rechazo);
+                    dataBas.push((o.basura / o.lbsRecibidas) * 100); rawValues.bas.push(o.basura);
+                }
+            });
+
+            createChart('chartStackedBarCamaroneras', {
+                type: 'bar',
+                data: {
+                    labels: camLabels,
+                    datasets: [
+                        { label: 'Clase A', data: dataA, backgroundColor: '#10b981', rawData: rawValues.a },
+                        { label: 'Clase B', data: dataB, backgroundColor: '#f59e0b', rawData: rawValues.b },
+                        { label: 'Clase C', data: dataC, backgroundColor: '#ef4444', rawData: rawValues.c },
+                        { label: 'Rechazo (Cola)', data: dataRech, backgroundColor: '#1e293b', rawData: rawValues.rech },
+                        { label: 'Merma/Basura', data: dataBas, backgroundColor: '#94a3b8', rawData: rawValues.bas }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: { x: { stacked: true }, y: { stacked: true, max: 100, title: {display: true, text: '% de Libras Recibidas'} } },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(ctx) {
+                                    let pct = ctx.raw.toFixed(1) + '%';
+                                    let val = ctx.dataset.rawData[ctx.dataIndex].toLocaleString('en-US', {maximumFractionDigits:0}) + ' lbs';
+                                    return `${ctx.dataset.label}: ${pct} (${val})`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
 
             // ---------------------------------------------------------
             // PESTAÑA 2: MATRIZ Y MAPA DE CALOR
@@ -516,7 +643,6 @@
                 </tr>
             `;
 
-            // Mapa de calor (Agrupado por Camaronera y Piscina)
             let piscinas = {};
             data.forEach(d => {
                 if(!d.Piscina) return;
@@ -530,7 +656,7 @@
                 piscinas[k].lbsA += d.Clases.A;
             });
             
-            let arrPiscinas = Object.values(piscinas).sort((a,b)=> b.lbs - a.lbs).slice(0, 15); // Top 15
+            let arrPiscinas = Object.values(piscinas).sort((a,b)=> b.lbs - a.lbs);
             document.getElementById('tbody-calor').innerHTML = arrPiscinas.map(p => {
                 let fr = p.lbs > 0 ? p.frescoS / p.lbs : 0;
                 let mlf = p.lbs > 0 ? p.manLFS / p.lbs : 0;
@@ -554,7 +680,7 @@
 
 
             // ---------------------------------------------------------
-            // PESTAÑA 3: RANKING DE PROVEEDORES (Corrección %)
+            // PESTAÑA 3: RANKING DE PROVEEDORES
             // ---------------------------------------------------------
             let provs = {};
             data.forEach(d => {
@@ -562,7 +688,7 @@
                 if(!provs[p]) provs[p] = { lotes:0, lbsProc:0, fSum:0, a:0, b:0, c:0, rej:0 };
                 provs[p].lotes++;
                 provs[p].lbsProc += d.Libras_Procesadas;
-                provs[p].fSum += (d.Perc_Fresco * d.Libras_Procesadas); // Ponderado
+                provs[p].fSum += (d.Perc_Fresco * d.Libras_Procesadas);
                 provs[p].a += d.Clases.A; 
                 provs[p].b += d.Clases.B; 
                 provs[p].c += d.Clases.C;
@@ -571,13 +697,11 @@
             
             let rankArr = Object.keys(provs).map(k => {
                 let o = provs[k];
-                // Cálculo estricto de porcentajes para que no superen el 100%
                 let pa = o.lbsProc > 0 ? (o.a / o.lbsProc) * 100 : 0;
                 let pb = o.lbsProc > 0 ? (o.b / o.lbsProc) * 100 : 0;
                 let pc = o.lbsProc > 0 ? (o.c / o.lbsProc) * 100 : 0;
                 let pr = o.lbsProc > 0 ? (o.rej / o.lbsProc) * 100 : 0;
                 
-                // Normalización de seguridad (por si en la BD las sumas de clases superan las procesadas)
                 let totalPct = pa + pb + pc + pr;
                 if(totalPct > 100) { pa = (pa/totalPct)*100; pb = (pb/totalPct)*100; pc = (pc/totalPct)*100; pr = (pr/totalPct)*100; }
 
@@ -640,6 +764,28 @@
                     trs[i].style.display = txt.toUpperCase().indexOf(input) > -1 ? "" : "none";
                 }       
             }
+        }
+        
+        function exportToCSV() {
+            let table = document.getElementById("rawTable");
+            let rows = table.querySelectorAll("tr");
+            let csv = [];
+            for (let i = 0; i < rows.length; i++) {
+                if(rows[i].style.display !== 'none') {
+                    let row = [], cols = rows[i].querySelectorAll("td, th");
+                    for (let j = 0; j < cols.length; j++) 
+                        row.push('"' + cols[j].innerText.replace(/"/g, '""') + '"');
+                    csv.push(row.join(","));
+                }
+            }
+            let csvFile = new Blob([csv.join("\n")], {type: "text/csv"});
+            let downloadLink = document.createElement("a");
+            downloadLink.download = "datos_consolidados.csv";
+            downloadLink.href = window.URL.createObjectURL(csvFile);
+            downloadLink.style.display = "none";
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
         }
 
         fetchInitialData();
