@@ -1,20 +1,256 @@
-<script>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Gerencial - Calidad y Rendimiento</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .tab-btn.active { border-bottom: 2px solid #0f172a; color: #0f172a; font-weight: 600; }
+        .gerencial-table th { background-color: #1e293b; color: white; padding: 12px; text-align: left; font-size: 0.85rem; text-transform: uppercase; }
+        .gerencial-table td { padding: 12px; border-bottom: 1px solid #e2e8f0; font-size: 0.9rem; }
+        .badge-green { background-color: #dcfce7; color: #166534; padding: 4px 8px; border-radius: 9999px; font-weight: 600; font-size: 0.8rem; }
+        .badge-yellow { background-color: #fef08a; color: #854d0e; padding: 4px 8px; border-radius: 9999px; font-weight: 600; font-size: 0.8rem; }
+        .badge-red { background-color: #fee2e2; color: #991b1b; padding: 4px 8px; border-radius: 9999px; font-weight: 600; font-size: 0.8rem; }
+        .bar-composition { display: flex; height: 12px; border-radius: 6px; overflow: hidden; width: 100%; min-width: 100px; background-color: #e2e8f0;}
+        .bar-a { background-color: #10b981; }
+        .bar-b { background-color: #f59e0b; }
+        .bar-c { background-color: #ef4444; }
+        .bar-d { background-color: #1e293b; }
+    </style>
+</head>
+<body class="text-slate-800">
+
+    <header class="bg-white shadow-sm px-6 py-4 flex justify-between items-center sticky top-0 z-50">
+        <div>
+            <h1 class="text-2xl font-bold text-slate-900">Análisis de Calidad y Rendimiento Industrial</h1>
+            <p class="text-sm text-slate-500">Integración: Liquidación (OMIPROD), Defectos y Organoléptico</p>
+        </div>
+        <div class="flex items-center gap-4">
+            <label class="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-md cursor-pointer text-sm transition font-semibold">
+                <i class="fa-solid fa-upload mr-2"></i> Cargar CSVs Locales
+                <input type="file" id="fileInput" multiple accept=".csv" class="hidden">
+            </label>
+            <span id="status-indicator" class="text-xs font-semibold px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full">Esperando Datos...</span>
+        </div>
+    </header>
+
+    <nav class="bg-white px-6 border-b border-slate-200 overflow-x-auto">
+        <ul class="flex gap-6 text-sm text-slate-500 min-w-max">
+            <li><button class="tab-btn active py-4 hover:text-slate-800 transition" onclick="openTab(event, 'tab1')">1. Rendimiento Industrial y Rechazo</button></li>
+            <li><button class="tab-btn py-4 hover:text-slate-800 transition" onclick="openTab(event, 'tab2')">2. Matriz Organoléptica</button></li>
+            <li><button class="tab-btn py-4 hover:text-slate-800 transition" onclick="openTab(event, 'tab3')">3. Ranking de Proveedores</button></li>
+            <li><button class="tab-btn py-4 hover:text-slate-800 transition" onclick="openTab(event, 'tab4')">4. Sábana Consolidada</button></li>
+        </ul>
+    </nav>
+
+    <main class="p-6 max-w-7xl mx-auto">
+        
+        <!-- PESTAÑA 1 -->
+        <section id="tab1" class="tab-content active">
+            <div class="flex flex-col md:flex-row gap-4 mb-6">
+                 <div class="w-full md:w-1/4">
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Filtrar por Camaronera</label>
+                    <select id="filterCamaronera" onchange="renderDashboard()" class="border border-slate-300 rounded px-3 py-2 text-sm w-full">
+                        <option value="ALL">Todas</option>
+                    </select>
+                </div>
+                <div class="w-full md:w-1/4">
+                     <label class="block text-sm font-medium text-slate-700 mb-1">Filtrar por Categoría (Clase)</label>
+                    <select id="filterClase" onchange="renderDashboard()" class="border border-slate-300 rounded px-3 py-2 text-sm w-full">
+                        <option value="ALL">Todas</option>
+                        <option value="A">Clase A</option>
+                        <option value="B">Clase B</option>
+                        <option value="C">Clase C</option>
+                        <option value="D">Clase D</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div class="bg-white p-4 rounded-lg shadow-sm border border-slate-200">
+                    <p class="text-xs text-slate-500 font-bold uppercase">Rendimiento Industrial</p>
+                    <h3 class="text-2xl font-black text-slate-800 mt-1" id="kpi-rendimiento">0%</h3>
+                    <p class="text-xs text-slate-400 mt-1" id="kpi-rendimiento-sub">Proc / Recibido</p>
+                </div>
+                <div class="bg-white p-4 rounded-lg shadow-sm border border-slate-200">
+                    <p class="text-xs text-slate-500 font-bold uppercase">Downgrade a Cola (% Rechazo)</p>
+                    <h3 class="text-2xl font-black text-rose-600 mt-1" id="kpi-rechazo">0%</h3>
+                    <p class="text-xs text-slate-400 mt-1" id="kpi-rechazo-sub">0 lbs desviadas</p>
+                </div>
+                <div class="bg-white p-4 rounded-lg shadow-sm border border-slate-200">
+                    <p class="text-xs text-slate-500 font-bold uppercase">Recuperación Premium (Clase A)</p>
+                    <h3 class="text-2xl font-black text-emerald-600 mt-1" id="kpi-premium">0%</h3>
+                    <p class="text-xs text-slate-400 mt-1" id="kpi-premium-sub">0 lbs Entero Clase A</p>
+                </div>
+                <div class="bg-white p-4 rounded-lg shadow-sm border border-slate-200">
+                    <p class="text-xs text-slate-500 font-bold uppercase">Libras Procesadas Totales</p>
+                    <h3 class="text-2xl font-black text-slate-800 mt-1" id="kpi-procesadas">0</h3>
+                    <p class="text-xs text-slate-400 mt-1" id="kpi-valor">Valor Liq: $0</p>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                <div class="bg-white p-4 rounded-lg shadow-sm border border-slate-200">
+                    <h4 class="text-sm font-bold text-slate-700 mb-4">Flujo de Pérdida de Valor (Base Porcentual 100%)</h4>
+                    <div class="relative h-64"><canvas id="chartWaterfall"></canvas></div>
+                </div>
+                <div class="bg-white p-4 rounded-lg shadow-sm border border-slate-200 flex flex-col items-center justify-center">
+                     <h4 class="text-sm font-bold text-slate-700 mb-4 w-full text-left">Distribución de Clases (Entero)</h4>
+                    <div class="relative h-64 w-full max-w-sm"><canvas id="chartPie"></canvas></div>
+                </div>
+            </div>
+             <div class="bg-white p-4 rounded-lg shadow-sm border border-slate-200">
+                <h4 class="text-sm font-bold text-slate-700 mb-4">Disposición de Libras Recibidas por Camaronera (Composición 100%)</h4>
+                <div class="relative h-[400px] w-full overflow-x-auto">
+                    <div class="min-w-[800px] h-full">
+                        <canvas id="chartStackedBarCamaroneras"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- PESTAÑA 2 -->
+        <section id="tab2" class="tab-content">
+            <div class="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden mb-6">
+                <div class="p-4 border-b border-slate-200">
+                    <h2 class="text-lg font-bold text-slate-800">MATRIZ DE CLASIFICACIÓN ORGANOLÉPTICA</h2>
+                    <p class="text-xs text-slate-500">Umbrales técnicos vs Clase Real (OMIPROD0016)</p>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full gerencial-table">
+                        <thead>
+                            <tr>
+                                <th>Condición (Real)</th>
+                                <th>% Fresco y Sano</th>
+                                <th>Sabores (TML/TL/TF)</th>
+                                <th>Manchas L. / F.</th>
+                                <th>Bact. Leve</th>
+                                <th>Volumen Actual Procesado</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-matriz">
+                            <!-- Generado por JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+                <div class="p-4 border-b border-slate-200 flex justify-between items-center">
+                    <div>
+                        <h2 class="text-lg font-bold text-slate-800">MAPA DE CALOR POR CAMARONERA OFICIAL Y PISCINA</h2>
+                        <p class="text-xs text-slate-500">Promedios ponderados por volumen de lote</p>
+                    </div>
+                </div>
+                <div class="overflow-x-auto h-[400px]">
+                    <table class="w-full gerencial-table relative">
+                        <thead class="sticky top-0 shadow-sm z-10">
+                            <tr>
+                                <th>Camaronera Oficial</th>
+                                <th>Piscina</th>
+                                <th>Libras Procesadas</th>
+                                <th>% Fresco y Sano</th>
+                                <th>Tierra Máx %</th>
+                                <th>Mancha L/F %</th>
+                                <th>Bact. Leve %</th>
+                                <th>% Clase A Real</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-calor">
+                            <!-- Generado por JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- PESTAÑA 3 -->
+        <section id="tab3" class="tab-content">
+            <div class="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+                <div class="p-4 border-b border-slate-200">
+                    <h2 class="text-lg font-bold text-slate-800 uppercase">Ranking Oficial de Camaroneras y Proveedores</h2>
+                    <p class="text-xs text-slate-500">Ordenado por % Promedio Fresco y Sano</p>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full gerencial-table">
+                        <thead>
+                            <tr>
+                                <th>Pos.</th>
+                                <th>Camaronera Oficial</th>
+                                <th>Lotes</th>
+                                <th>Libras Proc.</th>
+                                <th>% Prom. Fresco</th>
+                                <th>% Clase A</th>
+                                <th>% Clase B</th>
+                                <th>% Clase C</th>
+                                <th>% Rechazo (Cola)</th>
+                                <th>Composición</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-ranking">
+                            <!-- Generado por JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- PESTAÑA 4 -->
+        <section id="tab4" class="tab-content">
+            <div class="bg-white p-4 rounded-lg shadow-sm border border-slate-200">
+                <div class="flex flex-col md:flex-row justify-between mb-4 gap-4">
+                    <input type="text" id="searchData" onkeyup="filterTable()" placeholder="Buscar Lote o Proveedor..." class="border border-slate-300 rounded px-3 py-2 text-sm w-full md:w-1/3">
+                    <button onclick="exportToCSV()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded text-sm font-bold transition"><i class="fa-solid fa-download mr-2"></i>Exportar CSV</button>
+                </div>
+                <div class="overflow-x-auto h-[600px] relative">
+                    <table class="w-full text-left border-collapse text-xs whitespace-nowrap" id="rawTable">
+                        <thead class="bg-slate-100 sticky top-0 shadow-sm z-10 text-slate-700">
+                            <tr>
+                                <th class="p-2 border">Lote</th>
+                                <th class="p-2 border">Camaronera Oficial</th>
+                                <th class="p-2 border">Libras Recib.</th>
+                                <th class="p-2 border">Libras Proc.</th>
+                                <th class="p-2 border">Lbs Rechazo</th>
+                                <th class="p-2 border">Lbs Clase A</th>
+                                <th class="p-2 border">Clase Válida</th>
+                                <th class="p-2 border">% Fresco</th>
+                                <th class="p-2 border">Gramaje OC</th>
+                                <th class="p-2 border">Metabisulfito</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-raw">
+                            <!-- Generado por JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
         function openTab(evt, tabName) {
             document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
             document.getElementById(tabName).classList.add('active');
             evt.currentTarget.classList.add('active');
-            if(tabName === 'tab1') renderDashboard(); 
+            if(tabName === 'tab1') renderDashboard(); // re-render charts to fix sizing issues on tab switch
         }
 
         let db = { liquidaciones: [], sabores: [], metabisulfito: [], consolidado: [] };
         let charts = {};
 
-        // Limpiador agresivo de números
         function parseNum(val) {
             if (typeof val === 'number') return val;
             if (!val || val.toString().trim() === '') return 0;
-            let cleanVal = val.toString().replace(/,/g, '').replace(/"/g, '').trim();
+            let cleanVal = val.toString().replace(/,/g, '').trim();
             return parseFloat(cleanVal) || 0;
         }
 
@@ -36,16 +272,10 @@
             let files = e.target.files;
             let loaded = 0;
             Array.from(files).forEach(file => {
-                let name = file.name.toLowerCase();
-                // DETECCIÓN INTELIGENTE DE DELIMITADOR (CORRIGE EL ERROR DE MILES)
-                let delim = name.includes('omiprod') ? ';' : ','; 
-                
                 Papa.parse(file, {
-                    header: true, 
-                    dynamicTyping: false, 
-                    skipEmptyLines: true,
-                    delimiter: delim,
+                    header: true, dynamicTyping: false, skipEmptyLines: true,
                     complete: function(results) {
+                        let name = file.name.toLowerCase();
                         if(name.includes('omiprod')) db.liquidaciones = results.data;
                         else if(name.includes('sabor')) db.sabores = results.data;
                         else if(name.includes('metabisulfito')) db.metabisulfito = results.data;
@@ -60,21 +290,16 @@
         async function fetchInitialData() {
             try {
                 const files = [
-                    { key: 'liquidaciones', path: './OMIPROD0016_tblControlDeLotesTmp.csv', delim: ';' },
-                    { key: 'sabores', path: './Sabor_Desglosado_Validado.csv', delim: ',' },
-                    { key: 'metabisulfito', path: './Metabisulfito_Validado.csv', delim: ',' }
+                    { key: 'liquidaciones', path: './OMIPROD0016_tblControlDeLotesTmp.csv' },
+                    { key: 'sabores', path: './Sabor_Desglosado_Validado.csv' },
+                    { key: 'metabisulfito', path: './Metabisulfito_Validado.csv' }
                 ];
                 let allLoaded = true;
                 for (let f of files) {
                     let res = await fetch(f.path);
                     if (!res.ok) { allLoaded = false; break; }
                     let text = await res.text();
-                    let parsed = Papa.parse(text, { 
-                        header: true, 
-                        dynamicTyping: false, 
-                        skipEmptyLines: true,
-                        delimiter: f.delim // SE FUERZA EL DELIMITADOR CORRECTO
-                    });
+                    let parsed = Papa.parse(text, { header: true, dynamicTyping: false, skipEmptyLines: true });
                     db[f.key] = parsed.data;
                 }
                 
@@ -111,7 +336,7 @@
                         Rechazo: parseNum(row['Rechazo']),
                         Gramaje_OC: parseNum(row['Gramaje OC']),
                         Valor_Total: 0,
-                        Clases: { A: 0, B: 0, C: 0, D: 0 }
+                        Clases: { A: 0, B: 0, C: 0, D: 0, RECHAZO: 0 }
                     });
                 }
                 let l = lotesMap.get(lote);
@@ -119,8 +344,11 @@
                 
                 let librasFilas = parseNum(row['Libras Totales']);
                 let claseStr = (row['Clase'] || "").toString().toUpperCase().trim();
+                let mpLiquidar = (row['Materia Prima a liquidar'] || "").toString().toUpperCase().trim();
                 
-                if(claseStr === 'A') l.Clases.A += librasFilas;
+                if(mpLiquidar.includes('RECHAZO') || mpLiquidar.includes('COLA')) {
+                    l.Clases.RECHAZO += librasFilas;
+                } else if(claseStr === 'A') l.Clases.A += librasFilas;
                 else if(claseStr === 'B') l.Clases.B += librasFilas;
                 else if(claseStr === 'C') l.Clases.C += librasFilas;
                 else if(claseStr === 'D') l.Clases.D += librasFilas;
@@ -184,9 +412,8 @@
 
             db.consolidado = Array.from(lotesMap.values());
             
-            // Poblar Filtros
+            // Populate Filters
             let camSelect = document.getElementById('filterCamaronera');
-            camSelect.innerHTML = '<option value="ALL">Todas</option>';
             Array.from(camaronerasSet).sort().forEach(c => {
                  let opt = document.createElement('option');
                  opt.value = c; opt.innerHTML = c;
@@ -217,7 +444,7 @@
         function renderDashboard() {
             const data = getFilteredData();
             
-            // TÓTALES
+            // TÓTALES PARA KPIs
             let totalRecibidas = data.reduce((a,b)=>a+b.Libras_Recibidas, 0);
             let totalProcesadas = data.reduce((a,b)=>a+b.Libras_Procesadas, 0);
             let totalRechazo = data.reduce((a,b)=>a+b.Rechazo, 0);
@@ -239,12 +466,16 @@
             document.getElementById('kpi-procesadas').innerText = totalProcesadas.toLocaleString('en-US', {maximumFractionDigits:0});
             document.getElementById('kpi-valor').innerText = "Valor Liq: $" + totalValor.toLocaleString('en-US', {maximumFractionDigits:0});
 
-            // GRÁFICA 1: CASCADA PORCENTUAL CON TOOLTIP NUMÉRICO
+            // ---------------------------------------------------------
+            // GRÁFICA 1: CASCADA PORCENTUAL CON VALORES NUMÉRICOS
+            // ---------------------------------------------------------
             let baseCascada = totalRecibidas > 0 ? totalRecibidas : 1;
             let pctBasura = (totalBasura / baseCascada) * 100;
             let pctProcesadas = (totalProcesadas / baseCascada) * 100;
             let pctRechazo = (totalRechazo / baseCascada) * 100;
             let pctEntero = pctProcesadas - pctRechazo;
+
+            // Arrays for tooltips
             let valArray = [totalRecibidas, -totalBasura, totalProcesadas, -totalRechazo, totalProcesadas - totalRechazo];
 
             createChart('chartWaterfall', {
@@ -252,7 +483,7 @@
                 data: {
                     labels: ['1. Recibidas', '2. Merma/Basura', '3. Procesadas', '4. Desvío Cola', '5. Entero Final'],
                     datasets: [{
-                        label: '% del Lote',
+                        label: '% del Lote Original',
                         data: [100, -pctBasura, pctProcesadas, -pctRechazo, pctEntero],
                         backgroundColor: ['#94a3b8', '#fecdd3', '#3b82f6', '#f59e0b', '#10b981'],
                         borderRadius: 4
@@ -276,8 +507,10 @@
                 }
             });
 
-            // GRÁFICA 2: DIAGRAMA DE PASTEL
-            createChart('chartPie', {
+            // ---------------------------------------------------------
+            // GRÁFICA PIE: DISTRIBUCIÓN DE CLASES
+            // ---------------------------------------------------------
+             createChart('chartPie', {
                 type: 'pie',
                 data: {
                     labels: ['Clase A', 'Clase B', 'Clase C'],
@@ -305,7 +538,9 @@
                 }
             });
 
-            // GRÁFICA 3: BARRAS APILADAS POR CAMARONERA (DISPOSICIÓN 100%)
+            // ---------------------------------------------------------
+            // GRÁFICA STACKED BAR: Disposición por Camaronera
+            // ---------------------------------------------------------
             let provDisp = {};
             data.forEach(d => {
                 let p = d.Camaronera_Oficial;
@@ -342,7 +577,7 @@
                         { label: 'Clase A', data: dataA, backgroundColor: '#10b981', rawData: rawValues.a },
                         { label: 'Clase B', data: dataB, backgroundColor: '#f59e0b', rawData: rawValues.b },
                         { label: 'Clase C', data: dataC, backgroundColor: '#ef4444', rawData: rawValues.c },
-                        { label: 'Rechazo a Cola', data: dataRech, backgroundColor: '#1e293b', rawData: rawValues.rech },
+                        { label: 'Rechazo (Cola)', data: dataRech, backgroundColor: '#1e293b', rawData: rawValues.rech },
                         { label: 'Merma/Basura', data: dataBas, backgroundColor: '#94a3b8', rawData: rawValues.bas }
                     ]
                 },
@@ -363,7 +598,10 @@
                 }
             });
 
-            // TABLAS MATRIZ Y MAPA DE CALOR
+
+            // ---------------------------------------------------------
+            // PESTAÑA 2: MATRIZ Y MAPA DE CALOR
+            // ---------------------------------------------------------
             let cls = { A:{lbs:0}, B:{lbs:0}, C:{lbs:0}, D:{lbs:0} };
             data.forEach(d => {
                 if(d.Clase_Valida === 'A') cls.A.lbs += d.Libras_Procesadas;
@@ -440,7 +678,10 @@
                 </tr>`;
             }).join('');
 
-            // PESTAÑA 3: RANKING
+
+            // ---------------------------------------------------------
+            // PESTAÑA 3: RANKING DE PROVEEDORES
+            // ---------------------------------------------------------
             let provs = {};
             data.forEach(d => {
                 let p = d.Camaronera_Oficial || "Desconocida";
@@ -493,7 +734,9 @@
                 </tr>
             `).join('');
 
+            // ---------------------------------------------------------
             // PESTAÑA 4: RAW DATA
+            // ---------------------------------------------------------
             document.getElementById('tbody-raw').innerHTML = data.map(d => `
                 <tr class="hover:bg-slate-50">
                     <td class="p-2 border font-mono font-bold">${d.Lote}</td>
@@ -547,3 +790,5 @@
 
         fetchInitialData();
     </script>
+</body>
+</html>
