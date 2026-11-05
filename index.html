@@ -150,19 +150,23 @@
             <div class="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
                 <div class="p-4 border-b border-slate-200 flex justify-between items-center">
                     <div>
-                        <h2 class="text-lg font-bold text-slate-800">MAPA DE CALOR POR CAMARONERA OFICIAL Y PISCINA</h2>
-                        <p class="text-xs text-slate-500">Promedios ponderados por volumen de lote</p>
+                        <h2 class="text-lg font-bold text-slate-800">MAPA DE CALOR POR LOTE, CAMARONERA Y PISCINA</h2>
+                        <p class="text-xs text-slate-500">Desglose individual de defectos y sabores limitantes por lote recibido</p>
                     </div>
                 </div>
-                <div class="overflow-x-auto h-[400px]">
-                    <table class="w-full gerencial-table relative">
+                <div class="overflow-x-auto h-[500px]">
+                    <table class="w-full gerencial-table relative whitespace-nowrap">
                         <thead class="sticky top-0 shadow-sm z-10">
                             <tr>
+                                <th>Lote</th>
                                 <th>Camaronera Oficial</th>
                                 <th>Piscina</th>
-                                <th>Libras Procesadas</th>
+                                <th>Libras Proc.</th>
                                 <th>% Fresco y Sano</th>
-                                <th>Tierra Máx %</th>
+                                <th class="bg-slate-700">Tierra TML %</th>
+                                <th class="bg-slate-700">Tierra TL %</th>
+                                <th class="bg-slate-700">Tierra TF %</th>
+                                <th class="bg-slate-700">Otros Sabores %</th>
                                 <th>Mancha L/F %</th>
                                 <th>Bact. Leve %</th>
                                 <th>% Clase A Real</th>
@@ -251,7 +255,6 @@
         let db = { liquidaciones: [], sabores: [], metabisulfito: [], consolidado: [] };
         let charts = {};
 
-        // Limpieza de números (borra comas y convierte a Float)
         function parseNum(val) {
             if (typeof val === 'number') return val;
             if (!val || val.toString().trim() === '') return 0;
@@ -259,17 +262,16 @@
             return parseFloat(cleanVal) || 0;
         }
 
-        // Resolución Inteligente de Camaronera (Bloquea el nombre genérico corporativo)
         function resolveCamaronera(camSab, pisSab, camOmi, pisOmi) {
             let finalPis = (pisSab || pisOmi || "").toString().trim().toUpperCase();
             let genericName = "OPERADORA Y PROCESADORA DE PRODUCTOS MARINOS";
             
-            // Regla 1: Identificación estricta por prefijo de Piscina
+            if (finalPis === "P1010") return "Puerto Inca 1";
+            
             if (finalPis.startsWith("PU") && finalPis.length >= 3) return "Puerto Inca " + finalPis.charAt(2);
             if (finalPis.startsWith("PD")) return "Puna 2";
             if (finalPis.startsWith("PT")) return "Taura";
 
-            // Regla 2: Cruce y validación (Prioridad Sabores)
             let finalCam = camOmi || "Desconocida";
             if (camSab && !camSab.toUpperCase().includes(genericName)) {
                 finalCam = camSab;
@@ -279,7 +281,6 @@
                 finalCam = camSab;
             }
 
-            // Regla 3: Si todo falla y sigue el nombre genérico, se etiqueta con la piscina
             if (finalCam.toUpperCase().includes(genericName) || finalCam.toUpperCase().includes("OMARSA S.A.")) {
                  if(finalPis) return "Omarsa - Piscina " + finalPis;
                  return "Omarsa (Genérico)";
@@ -296,7 +297,6 @@
                     header: true, 
                     dynamicTyping: false, 
                     skipEmptyLines: true,
-                    // Se quitó el delimitador forzado para que siempre use coma o autodetecte
                     complete: function(results) {
                         let name = file.name.toLowerCase();
                         if(name.includes('omiprod')) db.liquidaciones = results.data;
@@ -347,7 +347,6 @@
             let lotesMap = new Map();
             let camaronerasSet = new Set();
 
-            // 1. OMIPROD0016
             db.liquidaciones.forEach(row => {
                 let lote = (row['Lote'] || '').toString().trim();
                 if(!lote) return;
@@ -365,7 +364,8 @@
                         Rechazo: parseNum(row['Rechazo']),
                         Gramaje_OC: parseNum(row['Gramaje OC']),
                         Valor_Total: 0,
-                        Clases: { A: 0, B: 0, C: 0, D: 0, RECHAZO: 0 }
+                        Clases: { A: 0, B: 0, C: 0, D: 0, RECHAZO: 0 },
+                        TML: 0, TL: 0, TF: 0, Otros_Sabores: 0
                     });
                 }
                 let l = lotesMap.get(lote);
@@ -383,7 +383,6 @@
                 else if(claseStr === 'D') l.Clases.D += librasFilas;
             });
 
-            // 2. Metabisulfito
             let metaTemp = {};
             db.metabisulfito.forEach(row => {
                 let lote = (row['Lote'] || '').toString().trim();
@@ -399,7 +398,6 @@
                 metaTemp[lote].bactL += parseNum(row['E. hongo/bacteria leve (%)']) * lbs;
             });
 
-            // 3. Sabores y Finalización (CRUCE POR LOTE)
             db.sabores.forEach(row => {
                 let lote = (row['Lote'] || '').toString().trim();
                 if(lotesMap.has(lote)) {
@@ -410,14 +408,25 @@
                     l.Proveedor = (row['Proveedor'] || "Desconocido").trim();
                     l.Piscina = pisSab || l.Piscina_Omi;
                     
-                    // APLICACIÓN DE LA NUEVA LÓGICA DE LIMPIEZA
                     l.Camaronera_Oficial = resolveCamaronera(camSab, pisSab, l.Camaronera_Original_Omi, l.Piscina_Omi);
                     camaronerasSet.add(l.Camaronera_Oficial);
                     
                     l.Sabor_Caract = parseNum(row['Sabor caracteristico %']);
-                    l.Tierra_L = parseNum(row['Sabor tierra entero leve %']);
-                    l.Tierra_F = parseNum(row['Sabor tierra entero fuerte %']);
-                    l.Tierra_Max = l.Tierra_L + l.Tierra_F;
+                    
+                    l.TML = Math.max(parseNum(row['Sabor tierra entero muy leve %']), parseNum(row['Sabor tierra cola muy leve %']));
+                    l.TL = Math.max(parseNum(row['Sabor tierra entero leve %']), parseNum(row['Sabor tierra cola leve %']));
+                    l.TF = Math.max(parseNum(row['Sabor tierra entero fuerte %']), parseNum(row['Sabor tierra cola fuerte %']));
+                    
+                    let sumaOtros = 0;
+                    for (let key in row) {
+                        if (key.startsWith('Sabor') && key.endsWith('%')) {
+                            let k = key.toLowerCase();
+                            if (!k.includes('caracteristico') && !k.includes('tierra')) {
+                                sumaOtros += parseNum(row[key]);
+                            }
+                        }
+                    }
+                    l.Otros_Sabores = sumaOtros;
                     l.Diesel = parseNum(row['Sabor combustible entero fuerte %']) + parseNum(row['Sabor combustible cola fuerte %']);
                 }
             });
@@ -425,7 +434,6 @@
             Array.from(lotesMap.values()).forEach(l => {
                 let lote = l.Lote;
                 
-                // Si el lote solo estaba en OMIPROD y no pasó por el loop de sabores, se limpia el nombre de todos modos
                 if (l.Camaronera_Oficial === "Desconocida" && (l.Camaronera_Original_Omi || l.Piscina_Omi)) {
                     l.Camaronera_Oficial = resolveCamaronera(null, null, l.Camaronera_Original_Omi, l.Piscina_Omi);
                     camaronerasSet.add(l.Camaronera_Oficial);
@@ -453,7 +461,6 @@
 
             db.consolidado = Array.from(lotesMap.values());
             
-            // Poblar Filtros
             let camSelect = document.getElementById('filterCamaronera');
             camSelect.innerHTML = '<option value="ALL">Todas</option>';
             Array.from(camaronerasSet).sort().forEach(c => {
@@ -486,7 +493,6 @@
         function renderDashboard() {
             const data = getFilteredData();
             
-            // TÓTALES
             let totalRecibidas = data.reduce((a,b)=>a+b.Libras_Recibidas, 0);
             let totalProcesadas = data.reduce((a,b)=>a+b.Libras_Procesadas, 0);
             let totalRechazo = data.reduce((a,b)=>a+b.Rechazo, 0);
@@ -508,7 +514,6 @@
             document.getElementById('kpi-procesadas').innerText = totalProcesadas.toLocaleString('en-US', {maximumFractionDigits:0});
             document.getElementById('kpi-valor').innerText = "Valor Liq: $" + totalValor.toLocaleString('en-US', {maximumFractionDigits:0});
 
-            // GRÁFICA 1: CASCADA PORCENTUAL CON TOOLTIP NUMÉRICO
             let baseCascada = totalRecibidas > 0 ? totalRecibidas : 1;
             let pctBasura = (totalBasura / baseCascada) * 100;
             let pctProcesadas = (totalProcesadas / baseCascada) * 100;
@@ -545,7 +550,6 @@
                 }
             });
 
-            // GRÁFICA 2: DIAGRAMA DE PASTEL
             createChart('chartPie', {
                 type: 'pie',
                 data: {
@@ -574,7 +578,6 @@
                 }
             });
 
-            // GRÁFICA 3: BARRAS APILADAS POR CAMARONERA (DISPOSICIÓN 100%)
             let provDisp = {};
             data.forEach(d => {
                 let p = d.Camaronera_Oficial;
@@ -632,7 +635,6 @@
                 }
             });
 
-            // TABLAS MATRIZ Y MAPA DE CALOR
             let cls = { A:{lbs:0}, B:{lbs:0}, C:{lbs:0}, D:{lbs:0} };
             data.forEach(d => {
                 if(d.Clase_Valida === 'A') cls.A.lbs += d.Libras_Procesadas;
@@ -674,42 +676,32 @@
                 </tr>
             `;
 
-            let piscinas = {};
-            data.forEach(d => {
-                if(!d.Piscina) return;
-                let k = d.Camaronera_Oficial + '|' + d.Piscina;
-                if(!piscinas[k]) piscinas[k] = { cam: d.Camaronera_Oficial, pis: d.Piscina, lbs:0, frescoS:0, tieMax:0, manLFS:0, bacS:0, lbsA:0 };
-                piscinas[k].lbs += d.Libras_Procesadas;
-                piscinas[k].frescoS += (d.Perc_Fresco * d.Libras_Procesadas);
-                piscinas[k].tieMax = Math.max(piscinas[k].tieMax, (d.Tierra_Max || 0));
-                piscinas[k].manLFS += ((d.Mancha_Leve + d.Mancha_Fuerte) * d.Libras_Procesadas);
-                piscinas[k].bacS += (d.Bact_Leve * d.Libras_Procesadas);
-                piscinas[k].lbsA += d.Clases.A;
-            });
-            
-            let arrPiscinas = Object.values(piscinas).sort((a,b)=> b.lbs - a.lbs);
-            document.getElementById('tbody-calor').innerHTML = arrPiscinas.map(p => {
-                let fr = p.lbs > 0 ? p.frescoS / p.lbs : 0;
-                let mlf = p.lbs > 0 ? p.manLFS / p.lbs : 0;
-                let bac = p.lbs > 0 ? p.bacS / p.lbs : 0;
-                let pA = p.lbs > 0 ? (p.lbsA / p.lbs) * 100 : 0;
+            let arrLotes = [...data].sort((a,b) => b.Libras_Procesadas - a.Libras_Procesadas);
+            document.getElementById('tbody-calor').innerHTML = arrLotes.map(d => {
+                let fr = d.Perc_Fresco || 0;
+                let mlf = d.Mancha_Leve + d.Mancha_Fuerte || 0;
+                let bac = d.Bact_Leve || 0;
+                let pA = d.Libras_Procesadas > 0 ? (d.Clases.A / d.Libras_Procesadas) * 100 : 0;
                 
                 let badgeFr = fr >= 60 ? 'badge-green' : (fr >= 46 ? 'badge-yellow' : 'badge-red');
                 let colorA = pA >= 50 ? 'text-emerald-600' : (pA >= 20 ? 'text-amber-600' : 'text-rose-600');
                 
                 return `<tr>
-                    <td class="font-semibold">${p.cam}</td>
-                    <td>${p.pis}</td>
-                    <td class="font-mono">${p.lbs.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+                    <td class="font-mono font-bold">${d.Lote}</td>
+                    <td class="font-semibold">${d.Camaronera_Oficial}</td>
+                    <td>${d.Piscina}</td>
+                    <td class="font-mono">${d.Libras_Procesadas.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
                     <td><span class="${badgeFr}">${fr.toFixed(1)}%</span></td>
-                    <td>${p.tieMax.toFixed(1)}%</td>
+                    <td class="bg-slate-50 font-medium">${d.TML.toFixed(1)}%</td>
+                    <td class="bg-slate-50 font-medium">${d.TL.toFixed(1)}%</td>
+                    <td class="bg-slate-50 font-medium">${d.TF.toFixed(1)}%</td>
+                    <td class="bg-slate-50 font-bold text-slate-700">${d.Otros_Sabores.toFixed(1)}%</td>
                     <td>${mlf.toFixed(1)}%</td>
                     <td>${bac.toFixed(1)}%</td>
                     <td class="font-bold ${colorA}">${pA.toFixed(1)}%</td>
                 </tr>`;
             }).join('');
 
-            // PESTAÑA 3: RANKING
             let provs = {};
             data.forEach(d => {
                 let p = d.Camaronera_Oficial || "Desconocida";
@@ -762,7 +754,6 @@
                 </tr>
             `).join('');
 
-            // PESTAÑA 4: RAW DATA
             document.getElementById('tbody-raw').innerHTML = data.map(d => `
                 <tr class="hover:bg-slate-50">
                     <td class="p-2 border font-mono font-bold">${d.Lote}</td>
