@@ -275,7 +275,24 @@
             let finalPis = (pisSab || pisOmi || "").toString().trim().toUpperCase();
             let genericName = "OPERADORA Y PROCESADORA DE PRODUCTOS MARINOS";
             
-            if (finalPis === "P1010") return "Puerto Inca 1";
+            // EXCEPCIONES Y MAPEO DIRECTO DE PISCINAS SOLICITADO
+            const mapeoPiscinaCamaronera = {
+                "P1010": "Puerto Inca 1",
+                "932": "Camaronera Puna",
+                "293": "Camaronera Puna",
+                "897": "Camaronera Puna",
+                "75":  "Camaronera Cachugran",
+                "421": "Camaronera Chongon",
+                "845": "Camaronera Puna",
+                "868": "Camaronera Puna",
+                "848": "Camaronera Puna"
+            };
+
+            if (mapeoPiscinaCamaronera[finalPis]) {
+                return mapeoPiscinaCamaronera[finalPis];
+            }
+            
+            // Reglas por prefijos
             if (finalPis.startsWith("PU") && finalPis.length >= 3) return "Puerto Inca " + finalPis.charAt(2);
             if (finalPis.startsWith("PD")) return "Puna 2";
             if (finalPis.startsWith("PT")) return "Taura";
@@ -408,7 +425,7 @@
                 metaTemp[lote].bactL += parseNum(getVal(row, ['E. hongo/bacteria leve (%)'])) * lbs;
             });
 
-            // 3. Sabores y Finalización
+            // 3. Sabores y Finalización (CRUCE POR LOTE)
             db.sabores.forEach(row => {
                 let lote = (getVal(row, ['Lote']) || '').toString().trim();
                 if(lotesMap.has(lote)) {
@@ -424,6 +441,7 @@
                     
                     l.Sabor_Caract = parseNum(getVal(row, ['Sabor caracteristico %']));
                     
+                    // Cálculo EXCLUSIVO para ENTERO
                     l.TML = parseNum(getVal(row, ['Sabor tierra entero muy leve %']));
                     l.TL = parseNum(getVal(row, ['Sabor tierra entero leve %']));
                     l.TF = parseNum(getVal(row, ['Sabor tierra entero fuerte %']));
@@ -431,8 +449,10 @@
                     
                     let sumaOtros = 0;
                     for (let key in row) {
+                        // Iteramos sobre las llaves originales del CSV
                         if (key.trim().startsWith('Sabor') && key.trim().endsWith('%')) {
                             let k = key.toLowerCase();
+                            // Filtrar estrictamente SABORES DE ENTERO y excluir Característico y Tierra
                             if (k.includes('entero') && !k.includes('caracteristico') && !k.includes('tierra')) {
                                 sumaOtros += parseNum(row[key]);
                             }
@@ -526,7 +546,6 @@
             document.getElementById('kpi-procesadas').innerText = totalProcesadas.toLocaleString('en-US', {maximumFractionDigits:0});
             document.getElementById('kpi-valor').innerText = "Valor Liq: $" + totalValor.toLocaleString('en-US', {maximumFractionDigits:0});
 
-            // GRÁFICA 1
             let baseCascada = totalRecibidas > 0 ? totalRecibidas : 1;
             let pctBasura = (totalBasura / baseCascada) * 100;
             let pctProcesadas = (totalProcesadas / baseCascada) * 100;
@@ -563,7 +582,6 @@
                 }
             });
 
-            // GRÁFICA 2
             createChart('chartPie', {
                 type: 'pie',
                 data: {
@@ -592,7 +610,6 @@
                 }
             });
 
-            // TABLAS MATRIZ
             let cls = { A:{lbs:0}, B:{lbs:0}, C:{lbs:0}, D:{lbs:0} };
             data.forEach(d => {
                 if(d.Clase_Valida === 'A') cls.A.lbs += d.Libras_Procesadas;
@@ -634,14 +651,12 @@
                 </tr>
             `;
 
-            // NUEVA TABLA DE CALOR (POR LOTE, CAMARONERA Y PISCINA)
             let arrLotes = [...data].sort((a,b) => b.Libras_Procesadas - a.Libras_Procesadas);
             document.getElementById('tbody-calor').innerHTML = arrLotes.map(d => {
                 let fr = d.Perc_Fresco || 0;
                 let mlf = d.Mancha_Leve + d.Mancha_Fuerte || 0;
                 let bac = d.Bact_Leve || 0;
                 
-                // Cálculo de Porcentajes de Clases A, B y C
                 let pA = d.Libras_Procesadas > 0 ? (d.Clases.A / d.Libras_Procesadas) * 100 : 0;
                 let pB = d.Libras_Procesadas > 0 ? (d.Clases.B / d.Libras_Procesadas) * 100 : 0;
                 let pC = d.Libras_Procesadas > 0 ? (d.Clases.C / d.Libras_Procesadas) * 100 : 0;
@@ -670,7 +685,6 @@
                 </tr>`;
             }).join('');
 
-            // PESTAÑA 3: RANKING
             let provs = {};
             data.forEach(d => {
                 let p = d.Camaronera_Oficial || "Desconocida";
@@ -723,7 +737,6 @@
                 </tr>
             `).join('');
 
-            // PESTAÑA 4: RAW DATA
             document.getElementById('tbody-raw').innerHTML = data.map(d => `
                 <tr class="hover:bg-slate-50">
                     <td class="p-2 border font-mono font-bold">${d.Lote}</td>
