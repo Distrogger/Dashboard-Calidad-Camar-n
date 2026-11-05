@@ -111,14 +111,6 @@
                     <div class="relative h-64 w-full max-w-sm"><canvas id="chartPie"></canvas></div>
                 </div>
             </div>
-             <div class="bg-white p-4 rounded-lg shadow-sm border border-slate-200">
-                <h4 class="text-sm font-bold text-slate-700 mb-4">Disposición de Libras Recibidas por Camaronera (Composición 100%)</h4>
-                <div class="relative h-[400px] w-full overflow-x-auto">
-                    <div class="min-w-[800px] h-full">
-                        <canvas id="chartStackedBarCamaroneras"></canvas>
-                    </div>
-                </div>
-            </div>
         </section>
 
         <!-- PESTAÑA 2 -->
@@ -170,7 +162,9 @@
                                 <th class="bg-slate-700 text-white">Otros Sabores %</th>
                                 <th>Mancha L/F %</th>
                                 <th>Bact. Leve %</th>
-                                <th>% Clase A Real</th>
+                                <th>% Clase A</th>
+                                <th>% Clase B</th>
+                                <th>% Clase C</th>
                             </tr>
                         </thead>
                         <tbody id="tbody-calor">
@@ -414,7 +408,7 @@
                 metaTemp[lote].bactL += parseNum(getVal(row, ['E. hongo/bacteria leve (%)'])) * lbs;
             });
 
-            // 3. Sabores y Finalización (CRUCE POR LOTE)
+            // 3. Sabores y Finalización
             db.sabores.forEach(row => {
                 let lote = (getVal(row, ['Lote']) || '').toString().trim();
                 if(lotesMap.has(lote)) {
@@ -430,7 +424,6 @@
                     
                     l.Sabor_Caract = parseNum(getVal(row, ['Sabor caracteristico %']));
                     
-                    // Cálculo EXCLUSIVO para ENTERO
                     l.TML = parseNum(getVal(row, ['Sabor tierra entero muy leve %']));
                     l.TL = parseNum(getVal(row, ['Sabor tierra entero leve %']));
                     l.TF = parseNum(getVal(row, ['Sabor tierra entero fuerte %']));
@@ -438,10 +431,8 @@
                     
                     let sumaOtros = 0;
                     for (let key in row) {
-                        // Iteramos sobre las llaves originales del CSV
                         if (key.trim().startsWith('Sabor') && key.trim().endsWith('%')) {
                             let k = key.toLowerCase();
-                            // Filtrar estrictamente SABORES DE ENTERO y excluir Característico y Tierra
                             if (k.includes('entero') && !k.includes('caracteristico') && !k.includes('tierra')) {
                                 sumaOtros += parseNum(row[key]);
                             }
@@ -535,6 +526,7 @@
             document.getElementById('kpi-procesadas').innerText = totalProcesadas.toLocaleString('en-US', {maximumFractionDigits:0});
             document.getElementById('kpi-valor').innerText = "Valor Liq: $" + totalValor.toLocaleString('en-US', {maximumFractionDigits:0});
 
+            // GRÁFICA 1
             let baseCascada = totalRecibidas > 0 ? totalRecibidas : 1;
             let pctBasura = (totalBasura / baseCascada) * 100;
             let pctProcesadas = (totalProcesadas / baseCascada) * 100;
@@ -571,6 +563,7 @@
                 }
             });
 
+            // GRÁFICA 2
             createChart('chartPie', {
                 type: 'pie',
                 data: {
@@ -599,63 +592,7 @@
                 }
             });
 
-            let provDisp = {};
-            data.forEach(d => {
-                let p = d.Camaronera_Oficial;
-                if(!provDisp[p]) provDisp[p] = { lbsRecibidas:0, a:0, b:0, c:0, d:0, rechazo:0, basura:0 };
-                provDisp[p].lbsRecibidas += d.Libras_Recibidas;
-                provDisp[p].a += d.Clases.A;
-                provDisp[p].b += d.Clases.B;
-                provDisp[p].c += d.Clases.C;
-                provDisp[p].d += d.Clases.D;
-                provDisp[p].rechazo += d.Rechazo;
-                provDisp[p].basura += d.Basura;
-            });
-
-            let camLabels = [];
-            let dataA = [], dataB = [], dataC = [], dataRech = [], dataBas = [], rawValues = {a:[], b:[], c:[], rech:[], bas:[]};
-
-            Object.keys(provDisp).sort().forEach(k => {
-                let o = provDisp[k];
-                if(o.lbsRecibidas > 0) {
-                    camLabels.push(k);
-                    dataA.push((o.a / o.lbsRecibidas) * 100); rawValues.a.push(o.a);
-                    dataB.push((o.b / o.lbsRecibidas) * 100); rawValues.b.push(o.b);
-                    dataC.push((o.c / o.lbsRecibidas) * 100); rawValues.c.push(o.c);
-                    dataRech.push((o.rechazo / o.lbsRecibidas) * 100); rawValues.rech.push(o.rechazo);
-                    dataBas.push((o.basura / o.lbsRecibidas) * 100); rawValues.bas.push(o.basura);
-                }
-            });
-
-            createChart('chartStackedBarCamaroneras', {
-                type: 'bar',
-                data: {
-                    labels: camLabels,
-                    datasets: [
-                        { label: 'Clase A', data: dataA, backgroundColor: '#10b981', rawData: rawValues.a },
-                        { label: 'Clase B', data: dataB, backgroundColor: '#f59e0b', rawData: rawValues.b },
-                        { label: 'Clase C', data: dataC, backgroundColor: '#ef4444', rawData: rawValues.c },
-                        { label: 'Rechazo a Cola', data: dataRech, backgroundColor: '#1e293b', rawData: rawValues.rech },
-                        { label: 'Merma/Basura', data: dataBas, backgroundColor: '#94a3b8', rawData: rawValues.bas }
-                    ]
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    scales: { x: { stacked: true }, y: { stacked: true, max: 100, title: {display: true, text: '% de Libras Recibidas'} } },
-                    plugins: {
-                        tooltip: {
-                            callbacks: {
-                                label: function(ctx) {
-                                    let pct = ctx.raw.toFixed(1) + '%';
-                                    let val = ctx.dataset.rawData[ctx.dataIndex].toLocaleString('en-US', {maximumFractionDigits:0}) + ' lbs';
-                                    return `${ctx.dataset.label}: ${pct} (${val})`;
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-
+            // TABLAS MATRIZ
             let cls = { A:{lbs:0}, B:{lbs:0}, C:{lbs:0}, D:{lbs:0} };
             data.forEach(d => {
                 if(d.Clase_Valida === 'A') cls.A.lbs += d.Libras_Procesadas;
@@ -697,15 +634,22 @@
                 </tr>
             `;
 
+            // NUEVA TABLA DE CALOR (POR LOTE, CAMARONERA Y PISCINA)
             let arrLotes = [...data].sort((a,b) => b.Libras_Procesadas - a.Libras_Procesadas);
             document.getElementById('tbody-calor').innerHTML = arrLotes.map(d => {
                 let fr = d.Perc_Fresco || 0;
                 let mlf = d.Mancha_Leve + d.Mancha_Fuerte || 0;
                 let bac = d.Bact_Leve || 0;
+                
+                // Cálculo de Porcentajes de Clases A, B y C
                 let pA = d.Libras_Procesadas > 0 ? (d.Clases.A / d.Libras_Procesadas) * 100 : 0;
+                let pB = d.Libras_Procesadas > 0 ? (d.Clases.B / d.Libras_Procesadas) * 100 : 0;
+                let pC = d.Libras_Procesadas > 0 ? (d.Clases.C / d.Libras_Procesadas) * 100 : 0;
                 
                 let badgeFr = fr >= 60 ? 'badge-green' : (fr >= 46 ? 'badge-yellow' : 'badge-red');
-                let colorA = pA >= 50 ? 'text-emerald-600' : (pA >= 20 ? 'text-amber-600' : 'text-rose-600');
+                let colorA = pA >= 50 ? 'text-emerald-600' : (pA >= 20 ? 'text-emerald-500' : 'text-slate-600');
+                let colorB = pB >= 20 ? 'text-amber-600' : 'text-slate-600';
+                let colorC = pC > 0 ? 'text-rose-600' : 'text-slate-600';
                 
                 return `<tr>
                     <td class="font-mono font-bold">${d.Lote}</td>
@@ -721,9 +665,12 @@
                     <td>${mlf.toFixed(1)}%</td>
                     <td>${bac.toFixed(1)}%</td>
                     <td class="font-bold ${colorA}">${pA.toFixed(1)}%</td>
+                    <td class="font-bold ${colorB}">${pB.toFixed(1)}%</td>
+                    <td class="font-bold ${colorC}">${pC.toFixed(1)}%</td>
                 </tr>`;
             }).join('');
 
+            // PESTAÑA 3: RANKING
             let provs = {};
             data.forEach(d => {
                 let p = d.Camaronera_Oficial || "Desconocida";
@@ -776,6 +723,7 @@
                 </tr>
             `).join('');
 
+            // PESTAÑA 4: RAW DATA
             document.getElementById('tbody-raw').innerHTML = data.map(d => `
                 <tr class="hover:bg-slate-50">
                     <td class="p-2 border font-mono font-bold">${d.Lote}</td>
